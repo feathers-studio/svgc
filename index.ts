@@ -18,8 +18,15 @@ const toJpg = (data: Uint8Array, quality: number) =>
 		return new Promise<Uint8Array>(res => img.write(MagickFormat.Jpeg, (data: Uint8Array) => res(data)));
 	});
 
-const imgTag =
+const imgRegex =
 	/(?<before><\s*image\s[^>]*xlink:href\s*=\s*")data:image\/(?<format>png|jpeg|jpg);base64,(?<data>[A-Za-z0-9+\/=]+)(?<after>"[^>]*>)/;
+
+type Parsed = {
+	before: string;
+	format: string;
+	data: string;
+	after: string;
+};
 
 const compare = (input: Uint8Array, compare: Uint8Array, fromIndex: number = 0) => {
 	for (let j = 0; j < compare.length; j++) if (input[fromIndex + j] !== compare[j]) return false;
@@ -61,31 +68,40 @@ const char = (char: string) => char.charCodeAt(0);
 const OPEN = encoder.encode("<image");
 const CLOSE = encoder.encode(">");
 
-interface SvgcOptions {
+/** left here for the potential future */
+// function parseAttrs(tag: string) {
+// 	const attrs: { key: string; value: string }[] = [];
+// 	const attrRegex = /(\w+|\w+:\w+)\s*=\s*"([^"]*?)"\s*/g;
+// 	let match;
+// 	while ((match = attrRegex.exec(tag)) !== null) {
+// 		const [, attrName, attrValue] = match;
+// 		attrs.push({ key: attrName, value: attrValue });
+// 	}
+// 	return attrs;
+// }
+
+export interface SvgcOptions {
+	/** Compression quality */
 	quality?: number;
+	/** Optimising PNGs will result in a loss of transparency and quality */
 	optimisePngs?: boolean;
-	downscaleToFit?: boolean;
+
+	// Future options
+	// /** Downscale images to fit within the width and height attributes if present */
+	// downscaleToFit?: boolean;
 }
 
 const defaultOptions: Required<SvgcOptions> = {
-	quality: 90,
+	quality: 80,
 	optimisePngs: true,
-	downscaleToFit: true,
+	// downscaleToFit: true,
 };
 
 export async function svgc(input: Uint8Array, options: SvgcOptions = defaultOptions) {
+	const opts = { ...defaultOptions, ...options };
 	const out = new Buffer();
 
-	const opts = { ...defaultOptions, ...options };
-
 	await initialise();
-
-	type Parsed = {
-		before: string;
-		format: string;
-		data: string;
-		after: string;
-	};
 
 	let i = 0;
 	while (i < input.length) {
@@ -120,7 +136,7 @@ export async function svgc(input: Uint8Array, options: SvgcOptions = defaultOpti
 
 		i = end + 1;
 		const tag = input.subarray(start, i);
-		const match = decoder.decode(tag).match(imgTag);
+		const match = decoder.decode(tag).match(imgRegex);
 		if (match) {
 			const { before, format, data, after } = match.groups as Parsed;
 
